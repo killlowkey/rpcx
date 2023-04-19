@@ -24,8 +24,8 @@ func (s *Server) jsonrpcHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 读取 JSON RPC 请求
 	var req = &jsonrpcRequest{}
-
 	err = json.Unmarshal(data, req)
 	if err != nil {
 		var res = &jsonrpcRespone{}
@@ -51,12 +51,16 @@ func (s *Server) jsonrpcHandler(w http.ResponseWriter, r *http.Request) {
 	go s.handleJSONRPCRequest(ctx, req, r.Header)
 }
 
+// handleJSONRPCRequest 处理 JSON RPC 请求
+// 将 JSON RPC 请求封装成内部形式，进行调用，返回结果按照 JSON RPC 响应格式进行处理
 func (s *Server) handleJSONRPCRequest(ctx context.Context, r *jsonrpcRequest, header http.Header) *jsonrpcRespone {
 	s.Plugins.DoPreReadRequest(ctx)
 
+	// 响应
 	var res = &jsonrpcRespone{}
 	res.ID = r.ID
 
+	// 请求
 	req := protocol.NewMessage()
 	if req.Metadata == nil {
 		req.Metadata = make(map[string]string)
@@ -105,6 +109,7 @@ func (s *Server) handleJSONRPCRequest(ctx context.Context, r *jsonrpcRequest, he
 		return res
 	}
 
+	// 授权
 	err = s.auth(ctx, req)
 	if err != nil {
 		s.Plugins.DoPreWriteResponse(ctx, req, nil, err)
@@ -116,6 +121,7 @@ func (s *Server) handleJSONRPCRequest(ctx context.Context, r *jsonrpcRequest, he
 		return res
 	}
 
+	// 处理请求
 	resp, err := s.handleRequest(ctx, req)
 	if r.ID == nil {
 		return nil

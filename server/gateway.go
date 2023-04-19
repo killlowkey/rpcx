@@ -18,6 +18,9 @@ import (
 	"github.com/soheilhy/cmux"
 )
 
+// startGateway 启动网关
+// 1. 兼容 JSON RPC
+// 2. 兼容 HTTP 1.0
 func (s *Server) startGateway(network string, ln net.Listener) net.Listener {
 	if network != "tcp" && network != "tcp4" && network != "tcp6" && network != "reuseport" {
 		// log.Infof("network is not tcp/tcp4/tcp6 so can not start gateway")
@@ -57,6 +60,8 @@ func rpcxPrefixByteMatcher() cmux.Matcher {
 	}
 }
 
+// startHTTP1APIGateway 处理 HTTP 请求
+// 将 HTTP 封装成 message，进行内部调用
 func (s *Server) startHTTP1APIGateway(ln net.Listener) {
 	router := httprouter.New()
 	router.POST("/*servicePath", s.handleGatewayRequest)
@@ -95,6 +100,8 @@ func (s *Server) closeHTTP1APIGateway(ctx context.Context) error {
 	return nil
 }
 
+// handleGatewayRequest 处理 HTTP 请求
+// 1. 从请求头中读取元数据：ServicePath、Version、ID
 func (s *Server) handleGatewayRequest(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 	ctx := share.WithValue(r.Context(), RemoteConnContextKey, r.RemoteAddr) // notice: It is a string, different with TCP (net.Conn)
 	err := s.Plugins.DoPreReadRequest(ctx)

@@ -1094,4 +1094,16 @@ func validIP4(ipAddress string) bool {
 	return ip4Reg.MatchString(ipAddress)
 }
 
-func validIP6(ipAddress str
+func validIP6(ipAddress string) bool {
+	ipAddress = strings.Trim(ipAddress, " ")
+	i := strings.LastIndex(ipAddress, ":")
+	ipAddress = ipAddress[:i] // remove port
+	ipAddress = strings.TrimPrefix(ipAddress, "[")
+	ipAddress = strings.TrimSuffix(ipAddress, "]")
+	ip := net.ParseIP(ipAddress)
+	if ip != nil && ip.To4() == nil {
+		return true
+	} else {
+		return false
+	}
+}
