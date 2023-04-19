@@ -98,12 +98,12 @@ const (
 
 // Message is the generic type of Request and Response.
 type Message struct {
-	*Header
-	ServicePath   string
-	ServiceMethod string
-	Metadata      map[string]string
-	Payload       []byte
-	data          []byte
+	*Header                         // 消息头：魔数、版本、消息类型（请求/响应）、消息 id
+	ServicePath   string            // 服务名称
+	ServiceMethod string            // rpc 方法名称
+	Metadata      map[string]string // 元数据
+	Payload       []byte            // 数据
+	data          []byte            // 压缩前的数据？
 }
 
 // NewMessage creates an empty message.
@@ -523,9 +523,4 @@ func (m *Message) Reset() {
 
 var (
 	zeroHeaderArray Header
-	zeroHeader      = zeroHeaderArray[1:]
-)
-
-func resetHeader(h *Header) {
-	copy(h[1:], zeroHeader)
-}
+	zeroHeader      = zeroHeaderArray[

@@ -843,4 +843,30 @@ func (client *Client) heartbeat() {
 func (client *Client) Close() error {
 	client.mutex.Lock()
 
-	for seq, call := ra
+	for seq, call := range client.pending {
+		delete(client.pending, seq)
+		if call != nil {
+			call.Error = ErrShutdown
+			call.done()
+		}
+	}
+
+	var err error
+	if !client.pluginClosed {
+		if client.Plugins != nil {
+			client.Plugins.DoClientConnectionClose(client.Conn)
+		}
+
+		client.pluginClosed = true
+		err = client.Conn.Close()
+	}
+
+	if client.closing || client.shutdown {
+		client.mutex.Unlock()
+		return ErrShutdown
+	}
+
+	client.closing = true
+	client.mutex.Unlock()
+	return err
+}
