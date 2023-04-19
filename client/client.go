@@ -243,8 +243,8 @@ func (client *Client) IsShutdown() bool {
 // If non-nil, done must be buffered or Go will deliberately crash.
 func (client *Client) Go(ctx context.Context, servicePath, serviceMethod string, args interface{}, reply interface{}, done chan *Call) *Call {
 	call := new(Call)
-	call.ServicePath = servicePath
-	call.ServiceMethod = serviceMethod
+	call.ServicePath = servicePath     // 服务名称
+	call.ServiceMethod = serviceMethod // rpc 方法
 	meta := ctx.Value(share.ReqMetaDataKey)
 	if meta != nil { // copy meta in context to meta in requests
 		call.Metadata = meta.(map[string]string)
@@ -254,8 +254,8 @@ func (client *Client) Go(ctx context.Context, servicePath, serviceMethod string,
 		ctx = share.NewContext(ctx)
 	}
 
-	call.Args = args
-	call.Reply = reply
+	call.Args = args   // 调用方法参数
+	call.Reply = reply // 响应
 	if done == nil {
 		done = make(chan *Call, 10) // buffered.
 	} else {
@@ -273,6 +273,7 @@ func (client *Client) Go(ctx context.Context, servicePath, serviceMethod string,
 		log.Debugf("client.Go send request for %s.%s, args: %+v in case of client call", servicePath, serviceMethod, args)
 	}
 
+	// 向服务端发送请求
 	go client.send(ctx, call)
 
 	return call
@@ -283,6 +284,7 @@ func (client *Client) Call(ctx context.Context, servicePath, serviceMethod strin
 	return client.call(ctx, servicePath, serviceMethod, args, reply)
 }
 
+// call 同步调用，由内部使用，可通过 context 来控制调用链路
 func (client *Client) call(ctx context.Context, servicePath, serviceMethod string, args interface{}, reply interface{}) error {
 	seq := new(uint64)
 
@@ -299,11 +301,12 @@ func (client *Client) call(ctx context.Context, servicePath, serviceMethod strin
 		}()
 	}
 
+	// 异步调用转同步调用
 	Done := client.Go(ctx, servicePath, serviceMethod, args, reply, make(chan *Call, 1)).Done
 
 	var err error
 	select {
-	case <-ctx.Done(): // cancel by context
+	case <-ctx.Done(): // context 取消
 		client.mutex.Lock()
 		call := client.pending[*seq]
 		delete(client.pending, *seq)
@@ -314,8 +317,9 @@ func (client *Client) call(ctx context.Context, servicePath, serviceMethod strin
 		}
 
 		return ctx.Err()
-	case call := <-Done:
+	case call := <-Done: // 调用完成
 		err = call.Error
+		// 封装元数据
 		meta := ctx.Value(share.ResMetaDataKey)
 		if meta != nil && len(call.ResMetadata) > 0 {
 			resMeta := meta.(map[string]string)
@@ -488,6 +492,7 @@ func urlencode(data map[string]string) string {
 func (client *Client) send(ctx context.Context, call *Call) {
 	// Register this call.
 	client.mutex.Lock()
+	// 校验当前客户端状态，处于关闭或者正在关闭状态就无需处理
 	if client.shutdown || client.closing {
 		call.Error = ErrShutdown
 		client.mutex.Unlock()
@@ -495,11 +500,13 @@ func (client *Client) send(ctx context.Context, call *Call) {
 		return
 	}
 
+	// 是否为健康检查
 	isHeartbeat := call.ServicePath == "" && call.ServiceMethod == ""
 	serializeType := client.option.SerializeType
 	if isHeartbeat {
 		serializeType = protocol.MsgPack
 	}
+	// 根据序列化类型获取对应的编解码器
 	codec := share.Codecs[serializeType]
 	if codec == nil {
 		call.Error = ErrUnsupportedCodec
@@ -508,23 +515,25 @@ func (client *Client) send(ctx context.Context, call *Call) {
 		return
 	}
 
+	// 惰性初始化，用于存储等待响应的 call
 	if client.pending == nil {
 		client.pending = make(map[uint64]*Call)
 	}
 
-	seq := client.seq
-	client.seq++
-	client.pending[seq] = call
+	seq := client.seq          // 当前请求的序列号,在分布式好像会有重复，还需后续研究一下
+	client.seq++               // 累加序列号
+	client.pending[seq] = call // 序列号与 call 是一一对应的
 	client.mutex.Unlock()
 
 	if cseq, ok := ctx.Value(seqKey{}).(*uint64); ok {
 		*cseq = seq
 	}
 
-	// req := protocol.NewMessage()
+	// 请求载体，在 rpcx 中请求和响应都是用 Message 来表示
 	req := protocol.NewMessage()
 	req.SetMessageType(protocol.Request)
 	req.SetSeq(seq)
+	// 无响应情况就是 oneway
 	if call.Reply == nil {
 		req.SetOneway(true)
 	}
@@ -537,13 +546,17 @@ func (client *Client) send(ctx context.Context, call *Call) {
 		req.SetSerializeType(client.option.SerializeType)
 	}
 
+	// 元数据
 	if call.Metadata != nil {
 		req.Metadata = call.Metadata
 	}
 
+	// 服务名称与 rpc 方法
 	req.ServicePath = call.ServicePath
 	req.ServiceMethod = call.ServiceMethod
 
+	// 编码：struct -> 二进制数据
+	// 编码失败，表示该 call 无需处理
 	data, err := codec.Encode(call.Args)
 	if err != nil {
 		client.mutex.Lock()
@@ -553,12 +566,15 @@ func (client *Client) send(ctx context.Context, call *Call) {
 		call.done()
 		return
 	}
+	// 当前数据大于 1024，并且采用了压缩算法
 	if len(data) > 1024 && client.option.CompressType != protocol.None {
 		req.SetCompressType(client.option.CompressType)
 	}
 
+	// 编码后的数据，二进制形式
 	req.Payload = data
 
+	// 调用客户端插件
 	if client.Plugins != nil {
 		_ = client.Plugins.DoClientBeforeEncode(req)
 	}
@@ -567,8 +583,8 @@ func (client *Client) send(ctx context.Context, call *Call) {
 		log.Debugf("client.send for %s.%s, args: %+v in case of client call", call.ServicePath, call.ServiceMethod, call.Args)
 	}
 	allData := req.EncodeSlicePointer()
-	_, err = client.Conn.Write(*allData)
-	protocol.PutData(allData)
+	_, err = client.Conn.Write(*allData) // 发送请求，网络层面
+	protocol.PutData(allData)            // 池化设计，归还数据，方便后续复用，在中间件设计中很常见
 	if share.Trace {
 		log.Debugf("client.sent for %s.%s, args: %+v in case of client call", call.ServicePath, call.ServiceMethod, call.Args)
 	}
@@ -596,6 +612,7 @@ func (client *Client) send(ctx context.Context, call *Call) {
 
 	isOneway := req.IsOneway()
 
+	// 只发送不等待响应
 	if isOneway {
 		client.mutex.Lock()
 		call = client.pending[seq]
@@ -606,20 +623,26 @@ func (client *Client) send(ctx context.Context, call *Call) {
 		}
 	}
 
+	// 超时机制：等待响应
 	if client.option.IdleTimeout != 0 {
 		_ = client.Conn.SetDeadline(time.Now().Add(client.option.IdleTimeout))
 	}
 }
 
+// input 处理服务端响应
+// 对于异步处理流程，可以抄这段代码
 func (client *Client) input() {
 	var err error
 
 	for err == nil {
+		// 响应
 		res := protocol.NewMessage()
 		if client.option.IdleTimeout != 0 {
 			_ = client.Conn.SetDeadline(time.Now().Add(client.option.IdleTimeout))
 		}
 
+		// 读取响应
+		// 解码：二进制数据 -> struct
 		err = res.Decode(client.r)
 		if err != nil {
 			break
@@ -630,7 +653,8 @@ func (client *Client) input() {
 
 		seq := res.Seq()
 		var call *Call
-		isServerMessage := (res.MessageType() == protocol.Request && !res.IsHeartbeat() && res.IsOneway())
+		isServerMessage := res.MessageType() == protocol.Request && !res.IsHeartbeat() && res.IsOneway()
+		// 非服务端消息，直接忽略
 		if !isServerMessage {
 			client.mutex.Lock()
 			call = client.pending[seq]
@@ -643,14 +667,14 @@ func (client *Client) input() {
 		}
 
 		switch {
-		case call == nil:
+		case call == nil: // 未发现对应的 call，只能交由内部来处理
 			if isServerMessage {
 				if client.ServerMessageChan != nil {
 					client.handleServerRequest(res)
 				}
 				continue
 			}
-		case res.MessageStatusType() == protocol.Error:
+		case res.MessageStatusType() == protocol.Error: // 错误消息
 			// We've got an error response. Give this to the request
 			if len(res.Metadata) > 0 {
 				call.ResMetadata = res.Metadata
@@ -675,10 +699,10 @@ func (client *Client) input() {
 				}
 			}
 			call.done()
-		default:
-			if call.Raw {
+		default: // 正常响应
+			if call.Raw { // rpcx 自带协议
 				call.Metadata, call.Reply, _ = convertRes2Raw(res)
-			} else {
+			} else { // 自定义编解码器
 				data := res.Payload
 				if len(data) > 0 {
 					codec := share.Codecs[res.SerializeType()]
@@ -741,6 +765,7 @@ func (client *Client) input() {
 			err = io.ErrUnexpectedEOF
 		}
 	}
+	// 发生错误后，终止所有的 call
 	for _, call := range client.pending {
 		call.Error = err
 		call.done()
@@ -818,30 +843,4 @@ func (client *Client) heartbeat() {
 func (client *Client) Close() error {
 	client.mutex.Lock()
 
-	for seq, call := range client.pending {
-		delete(client.pending, seq)
-		if call != nil {
-			call.Error = ErrShutdown
-			call.done()
-		}
-	}
-
-	var err error
-	if !client.pluginClosed {
-		if client.Plugins != nil {
-			client.Plugins.DoClientConnectionClose(client.Conn)
-		}
-
-		client.pluginClosed = true
-		err = client.Conn.Close()
-	}
-
-	if client.closing || client.shutdown {
-		client.mutex.Unlock()
-		return ErrShutdown
-	}
-
-	client.closing = true
-	client.mutex.Unlock()
-	return err
-}
+	for seq, call := ra
