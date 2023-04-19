@@ -40,6 +40,7 @@ func (client *Client) Connect(network, address string) error {
 		if fn != nil {
 			conn, err = fn(client, network, address)
 		} else {
+			// 默认 TCP
 			conn, err = newDirectConn(client, network, address)
 		}
 	}
@@ -66,8 +67,10 @@ func (client *Client) Connect(network, address string) error {
 		// c.w = bufio.NewWriterSize(conn, WriterBuffsize)
 
 		// start reading and writing since connected
+		// 处理服务端消息
 		go client.input()
 
+		// 开启定期的健康检查
 		if client.option.Heartbeat && client.option.HeartbeatInterval > 0 {
 			go client.heartbeat()
 		}
@@ -91,6 +94,7 @@ func newDirectConn(c *Client, network, address string) (net.Conn, error) {
 		return nil, err
 	}
 
+	// TLS connection
 	if c.option.TLSConfig != nil {
 		dialer := &net.Dialer{
 			Timeout: c.option.ConnectTimeout,
@@ -134,6 +138,7 @@ func newDirectHTTPConn(c *Client, network, address string) (net.Conn, error) {
 
 		conn = net.Conn(tlsConn)
 	} else {
+		// 创建 TCP 连接
 		conn, err = net.DialTimeout("tcp", address, c.option.ConnectTimeout)
 	}
 	if err != nil {
@@ -141,6 +146,7 @@ func newDirectHTTPConn(c *Client, network, address string) (net.Conn, error) {
 		return nil, err
 	}
 
+	// 写入 HTTP 协议头
 	_, err = io.WriteString(conn, "CONNECT "+path+" HTTP/1.0\n\n")
 	if err != nil {
 		// Dial() success but Write() failed here, close the successfully

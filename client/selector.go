@@ -17,22 +17,30 @@ import (
 type SelectFunc func(ctx context.Context, servicePath, serviceMethod string, args interface{}) string
 
 // Selector defines selector that selects one service from candidates.
+// 选择器，根据参数从候选节点中选出一个节点
 type Selector interface {
+	// Select 从服务节点中选择一个节点
 	Select(ctx context.Context, servicePath, serviceMethod string, args interface{}) string // SelectFunc
+	// UpdateServer 更新服务，比如服务注册或摘除时，都需要更新
 	UpdateServer(servers map[string]string)
 }
 
+// newSelector 工厂方法，根据 SelectMode 返回对应的选择器
 func newSelector(selectMode SelectMode, servers map[string]string) Selector {
 	switch selectMode {
 	case RandomSelect:
+		// 随机
 		return newRandomSelector(servers)
 	case RoundRobin:
+		// 轮训
 		return newRoundRobinSelector(servers)
 	case WeightedRoundRobin:
+		// 加权轮训
 		return newWeightedRoundRobinSelector(servers)
 	case WeightedICMP:
 		return newWeightedICMPSelector(servers)
 	case ConsistentHash:
+		// 一致性 hash
 		return newConsistentHashSelector(servers)
 	case SelectByUser:
 		return nil
