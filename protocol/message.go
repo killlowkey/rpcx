@@ -523,4 +523,9 @@ func (m *Message) Reset() {
 
 var (
 	zeroHeaderArray Header
-	zeroHeader      = zeroHeaderArray[
+	zeroHeader      = zeroHeaderArray[1:]
+)
+
+func resetHeader(h *Header) {
+	copy(h[1:], zeroHeader)
+}
