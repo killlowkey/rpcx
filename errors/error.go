@@ -6,6 +6,7 @@ import (
 )
 
 // MultiError holds multiple errors
+// 用于持有多个 error，error 追加需要加锁处理
 type MultiError struct {
 	Errors []error
 	mu     sync.Mutex

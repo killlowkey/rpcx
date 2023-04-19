@@ -9,6 +9,7 @@ import (
 )
 
 // Compressor defines a common compression interface.
+// 压缩接口，可以实现该接口去自定义压缩算法
 type Compressor interface {
 	Zip([]byte) ([]byte, error)
 	Unzip([]byte) ([]byte, error)

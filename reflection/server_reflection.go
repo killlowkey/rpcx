@@ -71,6 +71,7 @@ func New() *Reflection {
 	}
 }
 
+// Register 注册服务
 func (r *Reflection) Register(name string, rcvr interface{}, metadata string) error {
 	si := &ServiceInfo{}
 
@@ -148,6 +149,7 @@ func (r *Reflection) Register(name string, rcvr interface{}, metadata string) er
 	return nil
 }
 
+// Unregister 解除注册服务
 func (r *Reflection) Unregister(name string) error {
 	delete(r.Services, name)
 	return nil

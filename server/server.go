@@ -209,6 +209,7 @@ func (s *Server) getDoneChan() <-chan struct{} {
 
 // Serve starts and listens RPC requests.
 // It is blocked until receiving connections from clients.
+// 启动和监听 RPC 请求，阻塞等待接收客户端的连接
 func (s *Server) Serve(network, address string) (err error) {
 	var ln net.Listener
 	ln, err = s.makeListener(network, address)
@@ -229,6 +230,7 @@ func (s *Server) Serve(network, address string) (err error) {
 	}
 
 	// try to start gateway
+	// 去启动 gateway
 	ln = s.startGateway(network, ln)
 
 	return s.serveListener(ln)
@@ -261,7 +263,9 @@ func (s *Server) serveListener(ln net.Listener) error {
 	s.mu.Unlock()
 
 	for {
+		// 接收客户端连接
 		conn, e := ln.Accept()
+		// 发生错误
 		if e != nil {
 			if s.isShutdown() {
 				<-s.doneChan
@@ -291,6 +295,7 @@ func (s *Server) serveListener(ln net.Listener) error {
 		}
 		tempDelay = 0
 
+		// 设置 TCP 配置
 		if tc, ok := conn.(*net.TCPConn); ok {
 			period := s.options["TCPKeepAlivePeriod"]
 			if period != nil {
@@ -307,6 +312,7 @@ func (s *Server) serveListener(ln net.Listener) error {
 		}
 
 		s.mu.Lock()
+		// 存储该 connection
 		s.activeConn[conn] = struct{}{}
 		s.mu.Unlock()
 
@@ -314,6 +320,7 @@ func (s *Server) serveListener(ln net.Listener) error {
 			log.Debugf("server accepted an conn: %v", conn.RemoteAddr().String())
 		}
 
+		// 处理 connection
 		go s.serveConn(conn)
 	}
 }
@@ -443,6 +450,7 @@ func (s *Server) serveConn(conn net.Conn) {
 		ctx := share.WithValue(context.Background(), RemoteConnContextKey, conn)
 
 		// read a request from the underlying connection
+		// 从底层的连接中读取请求
 		req, err := s.readRequest(ctx, r)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
@@ -475,8 +483,10 @@ func (s *Server) serveConn(conn net.Conn) {
 			log.Debugf("server received an request %+v from conn: %v", req, conn.RemoteAddr().String())
 		}
 
+		// 封装成 context（rpcx context）
 		ctx = share.WithLocalValue(ctx, StartRequestContextKey, time.Now().UnixNano())
 		closeConn := false
+		// 非健康检查请求，需要授权
 		if !req.IsHeartbeat() {
 			err = s.auth(ctx, req)
 			closeConn = err != nil
@@ -504,11 +514,13 @@ func (s *Server) serveConn(conn net.Conn) {
 			continue
 		}
 
+		// 池化（对于 goroutine）处理
 		if s.pool != nil {
 			s.pool.Submit(func() {
 				s.processOneRequest(ctx, req, conn)
 			})
 		} else {
+			// 创建一个新的 goroutine 处理
 			go s.processOneRequest(ctx, req, conn)
 		}
 	}
@@ -524,6 +536,7 @@ func (s *Server) processOneRequest(ctx *share.Context, req *protocol.Message, co
 		}
 	}()
 
+	// 记录当前处理请求数量
 	atomic.AddInt32(&s.handlerMsgNum, 1)
 	defer atomic.AddInt32(&s.handlerMsgNum, -1)
 
@@ -562,6 +575,7 @@ func (s *Server) processOneRequest(ctx *share.Context, req *protocol.Message, co
 	}
 
 	// use handlers first
+	// 首先使用 handlers
 	if handler, ok := s.router[req.ServicePath+"."+req.ServiceMethod]; ok {
 		sctx := NewContext(ctx, conn, req, s.AsyncWrite)
 		err := handler(sctx)
@@ -572,6 +586,7 @@ func (s *Server) processOneRequest(ctx *share.Context, req *protocol.Message, co
 		return
 	}
 
+	// 处理请求，得到响应
 	res, err := s.handleRequest(ctx, req)
 	if err != nil {
 		if s.HandleServiceError != nil {
@@ -581,6 +596,7 @@ func (s *Server) processOneRequest(ctx *share.Context, req *protocol.Message, co
 		}
 	}
 
+	// 非单向请求，需要处理响应元数据
 	if !req.IsOneway() {
 		if len(resMetadata) > 0 { // copy meta in context to responses
 			meta := res.Metadata
@@ -595,6 +611,7 @@ func (s *Server) processOneRequest(ctx *share.Context, req *protocol.Message, co
 			}
 		}
 
+		// 返回响应
 		s.sendResponse(ctx, conn, err, req, res)
 	}
 
@@ -664,14 +681,19 @@ func (s *Server) auth(ctx context.Context, req *protocol.Message) error {
 	return nil
 }
 
+// handleRequest 处理请求
 func (s *Server) handleRequest(ctx context.Context, req *protocol.Message) (res *protocol.Message, err error) {
+	// RPC 方法基本信息
 	serviceName := req.ServicePath
 	methodName := req.ServiceMethod
 
+	// 从请求克隆得到响应
 	res = req.Clone()
 
+	// 修改消息类型为响应
 	res.SetMessageType(protocol.Response)
 	s.serviceMapMu.RLock()
+	// 根据服务名称获取到服务
 	service := s.serviceMap[serviceName]
 
 	if share.Trace {
@@ -679,10 +701,12 @@ func (s *Server) handleRequest(ctx context.Context, req *protocol.Message) (res 
 	}
 
 	s.serviceMapMu.RUnlock()
+	// 未找到服务
 	if service == nil {
 		err = errors.New("rpcx: can't find service " + serviceName)
 		return s.handleError(res, err)
 	}
+	// 从服务里面获取对应的 RPC 方法
 	mtype := service.method[methodName]
 	if mtype == nil {
 		if service.function[methodName] != nil { // check raw functions
@@ -693,14 +717,17 @@ func (s *Server) handleRequest(ctx context.Context, req *protocol.Message) (res 
 	}
 
 	// get a argv object from object pool
+	// 获取该 RPC 方法的参数
 	argv := reflectTypePools.Get(mtype.ArgType)
 
+	// 根据序列化类型拿到编解码器
 	codec := share.Codecs[req.SerializeType()]
 	if codec == nil {
 		err = fmt.Errorf("can not find codec for %d", req.SerializeType())
 		return s.handleError(res, err)
 	}
 
+	// 解码请求参数
 	err = codec.Decode(req.Payload, argv)
 	if err != nil {
 		return s.handleError(res, err)
@@ -716,7 +743,8 @@ func (s *Server) handleRequest(ctx context.Context, req *protocol.Message) (res 
 		return s.handleError(res, err)
 	}
 
-	if mtype.ArgType.Kind() != reflect.Ptr {
+	// 本地调用 RPC 方法
+	if mtype.ArgType.Kind() != reflect.Ptr { // 非指针
 		err = service.call(ctx, mtype, reflect.ValueOf(argv).Elem(), reflect.ValueOf(replyv))
 	} else {
 		err = service.call(ctx, mtype, reflect.ValueOf(argv), reflect.ValueOf(replyv))

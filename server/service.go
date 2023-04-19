@@ -350,6 +350,7 @@ func (s *service) call(ctx context.Context, mtype *methodType, argv, replyv refl
 
 	function := mtype.method.Func
 	// Invoke the method, providing a new value for the reply.
+	// 调用方法
 	returnValues := function.Call([]reflect.Value{s.rcvr, reflect.ValueOf(ctx), argv, replyv})
 	// The return value for the method is an error.
 	errInter := returnValues[0].Interface()

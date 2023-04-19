@@ -13,7 +13,7 @@ import (
 // The default logger output at level error, to turn everything on like this:
 // 	export RPCX_LOG_LEVEL=99
 
-// type of log level
+// Level type of log level
 type Level int
 
 // log level constant
