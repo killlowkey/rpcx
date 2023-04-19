@@ -383,4 +383,11 @@ func (s *service) callForFunction(ctx context.Context, ft *functionType, argv, r
 
 	// Invoke the function, providing a new value for the reply.
 	returnValues := ft.fn.Call([]reflect.Value{reflect.ValueOf(ctx), argv, replyv})
-	// T
+	// The return value for the method is an error.
+	errInter := returnValues[0].Interface()
+	if errInter != nil {
+		return errInter.(error)
+	}
+
+	return nil
+}

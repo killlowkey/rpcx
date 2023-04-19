@@ -5,7 +5,7 @@ import (
 	"net"
 )
 
-// TeeConnPlugin is a plugin that copy requests from clients and send to a io.Writer.
+// TeeConnPlugin is a plugin that copy requests from clients and send to an io.Writer.
 type TeeConnPlugin struct {
 	w io.Writer
 }

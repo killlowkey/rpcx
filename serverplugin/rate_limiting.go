@@ -8,6 +8,7 @@ import (
 )
 
 // RateLimitingPlugin can limit connecting per unit time
+// 限制每个时间单元中最大接收连接数量
 type RateLimitingPlugin struct {
 	FillInterval time.Duration
 	Capacity     int64

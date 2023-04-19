@@ -11,17 +11,17 @@ import (
 	"github.com/smallnest/rpcx/server"
 )
 
-// MetricsPlugin has an issue. It changes seq of requests and it is wrong!!!!
+// MetricsPlugin has an issue. It changes seq of requests, and it is wrong!!!!
 // we should use other methods to map requests and responses not but seq.
 
 // MetricsPlugin collects metrics of a rpc server.
 // You can report metrics to log, syslog, Graphite, InfluxDB or others to display them in Dashboard such as grafana, Graphite.
 type MetricsPlugin struct {
-	Registry metrics.Registry
+	Registry metrics.Registry // 指标注册中心，用于存储指标
 	Prefix   string
 }
 
-//NewMetricsPlugin creates a new MetricsPlugirn
+// NewMetricsPlugin creates a new MetricsPlugin
 func NewMetricsPlugin(registry metrics.Registry) *MetricsPlugin {
 	return &MetricsPlugin{Registry: registry}
 }
@@ -91,16 +91,14 @@ func (p *MetricsPlugin) PostWriteResponse(ctx context.Context, req *protocol.Mes
 // Log reports metrics into logs.
 //
 // p.Log( 5 * time.Second, log.New(os.Stderr, "metrics: ", log.Lmicroseconds))
-//
 func (p *MetricsPlugin) Log(freq time.Duration, l metrics.Logger) {
 	go metrics.Log(p.Registry, freq, l)
 }
 
 // Graphite reports metrics into graphite.
 //
-// 	addr, _ := net.ResolveTCPAddr("tcp", "127.0.0.1:2003")
-//  p.Graphite(10e9, "metrics", addr)
-//
+//		addr, _ := net.ResolveTCPAddr("tcp", "127.0.0.1:2003")
+//	 p.Graphite(10e9, "metrics", addr)
 func (p *MetricsPlugin) Graphite(freq time.Duration, prefix string, addr *net.TCPAddr) {
 	go metrics.Graphite(p.Registry, freq, prefix, addr)
 }

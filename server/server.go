@@ -391,13 +391,20 @@ func (s *Server) sendResponse(ctx *share.Context, conn net.Conn, err error, req,
 	s.Plugins.DoPostWriteResponse(ctx, req, res, err)
 }
 
+// serveConn 处理 connection
+// 1. 关注序列化与反序列化
+// 2. 关注本地 RPC 方法调用
+// 3. 因为奔溃引发的问题处理
+// 4. 内部状态处理
 func (s *Server) serveConn(conn net.Conn) {
+	// 服务处于关闭状态，直接关闭连接
 	if s.isShutdown() {
 		s.closeConn(conn)
 		return
 	}
 
 	defer func() {
+		// 获取调用栈
 		if err := recover(); err != nil {
 			const size = 64 << 10
 			buf := make([]byte, size)
@@ -414,10 +421,12 @@ func (s *Server) serveConn(conn net.Conn) {
 		}
 
 		// make sure all inflight requests are handled and all drained
+		// 确保当前的请求都被处理
 		if s.isShutdown() {
 			<-s.doneChan
 		}
 
+		// 关闭 connection
 		s.closeConn(conn)
 	}()
 
@@ -438,6 +447,7 @@ func (s *Server) serveConn(conn net.Conn) {
 
 	// read requests and handle it
 	for {
+		// 服务关闭了，就无须处理
 		if s.isShutdown() {
 			return
 		}
@@ -1084,4 +1094,4 @@ func validIP4(ipAddress string) bool {
 	return ip4Reg.MatchString(ipAddress)
 }
 
-func validIP6(ipAddress string) boo
+func validIP6(ipAddress str
