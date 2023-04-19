@@ -15,11 +15,11 @@ import (
 	"github.com/smallnest/rpcx/log"
 )
 
-// Precompute the reflect type for error. Can't use error directly
+// Precompute the reflection type for error. Can't use error directly
 // because Typeof takes an empty interface value. This is annoying.
 var typeOfError = reflect.TypeOf((*error)(nil)).Elem()
 
-// Precompute the reflect type for context.
+// Precompute the reflection type for context.
 var typeOfContext = reflect.TypeOf((*context.Context)(nil)).Elem()
 
 type methodType struct {
@@ -71,10 +71,12 @@ func isExportedOrBuiltinType(t reflect.Type) bool {
 // The client accesses each method using a string of the form "Type.Method",
 // where Type is the receiver's concrete type.
 func (s *Server) Register(rcvr interface{}, metadata string) error {
+	// 服务注册
 	sname, err := s.register(rcvr, "", false)
 	if err != nil {
 		return err
 	}
+	// 调用插件生命周期
 	return s.Plugins.DoRegister(sname, rcvr, metadata)
 }
 
@@ -121,6 +123,7 @@ func (s *Server) register(rcvr interface{}, name string, useName bool) (string, 
 	s.serviceMapMu.Lock()
 	defer s.serviceMapMu.Unlock()
 
+	// 每个 struct 对应一个服务
 	service := new(service)
 	service.typ = reflect.TypeOf(rcvr)
 	service.rcvr = reflect.ValueOf(rcvr)
@@ -141,8 +144,10 @@ func (s *Server) register(rcvr interface{}, name string, useName bool) (string, 
 	service.name = sname
 
 	// Install the methods
+	// 注册 struct 所有 public 方法
 	service.method = suitableMethods(service.typ, true)
 
+	// 并无方法注册
 	if len(service.method) == 0 {
 		var errorStr string
 
@@ -351,6 +356,7 @@ func (s *service) call(ctx context.Context, mtype *methodType, argv, replyv refl
 	function := mtype.method.Func
 	// Invoke the method, providing a new value for the reply.
 	// 调用方法
+	// RPC 方法签名：func (t *Arith) Mul(ctx context.Context, args *Args, reply *Reply) error
 	returnValues := function.Call([]reflect.Value{s.rcvr, reflect.ValueOf(ctx), argv, replyv})
 	// The return value for the method is an error.
 	errInter := returnValues[0].Interface()
@@ -377,11 +383,4 @@ func (s *service) callForFunction(ctx context.Context, ft *functionType, argv, r
 
 	// Invoke the function, providing a new value for the reply.
 	returnValues := ft.fn.Call([]reflect.Value{reflect.ValueOf(ctx), argv, replyv})
-	// The return value for the method is an error.
-	errInter := returnValues[0].Interface()
-	if errInter != nil {
-		return errInter.(error)
-	}
-
-	return nil
-}
+	// T

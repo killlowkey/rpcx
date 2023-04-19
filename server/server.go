@@ -77,29 +77,29 @@ type WorkerPool interface {
 
 // Server is rpcx server that use TCP or UDP.
 type Server struct {
-	ln                 net.Listener
-	readTimeout        time.Duration
-	writeTimeout       time.Duration
-	gatewayHTTPServer  *http.Server
+	ln                 net.Listener  // 连接监听
+	readTimeout        time.Duration // 读超时
+	writeTimeout       time.Duration // 写超时
+	gatewayHTTPServer  *http.Server  // 网关
 	jsonrpcHTTPServer  *http.Server
-	DisableHTTPGateway bool // disable http invoke or not.
-	DisableJSONRPC     bool // disable json rpc or not.
-	AsyncWrite         bool // set true if your server only serves few clients
-	pool               WorkerPool
+	DisableHTTPGateway bool       // disable http invoke or not.
+	DisableJSONRPC     bool       // disable json rpc or not.
+	AsyncWrite         bool       // set true if your server only serves few clients
+	pool               WorkerPool // 池化 goroutine 用于处理请求
 
 	serviceMapMu sync.RWMutex
-	serviceMap   map[string]*service
+	serviceMap   map[string]*service // 服务注册
 
-	router map[string]Handler
+	router map[string]Handler // 系统内部路由处理
 
-	mu         sync.RWMutex
-	activeConn map[net.Conn]struct{}
-	doneChan   chan struct{}
-	seq        uint64
+	mu         sync.RWMutex          // 读写锁
+	activeConn map[net.Conn]struct{} // 当前持有的连接
+	doneChan   chan struct{}         // 完成 channel
+	seq        uint64                // 当前序列号
 
-	inShutdown int32
-	onShutdown []func(s *Server)
-	onRestart  []func(s *Server)
+	inShutdown int32             // 是否为关闭状态
+	onShutdown []func(s *Server) // 关闭时回调
+	onRestart  []func(s *Server) // 重启时回调
 
 	// TLSConfig for creating tls tcp connection.
 	tlsConfig *tls.Config
@@ -107,14 +107,15 @@ type Server struct {
 	options map[string]interface{}
 
 	// CORS options
-	corsOptions *CORSOptions
+	corsOptions *CORSOptions // 跨越选项
 
-	Plugins PluginContainer
+	Plugins PluginContainer // 插件容器
 
 	// AuthFunc can be used to auth.
+	// 授权
 	AuthFunc func(ctx context.Context, req *protocol.Message, token string) error
 
-	handlerMsgNum int32
+	handlerMsgNum int32 // 当前处理消息数量
 
 	// HandleServiceError is used to get all service errors. You can use it write logs or others.
 	HandleServiceError func(error)
@@ -1083,16 +1084,4 @@ func validIP4(ipAddress string) bool {
 	return ip4Reg.MatchString(ipAddress)
 }
 
-func validIP6(ipAddress string) bool {
-	ipAddress = strings.Trim(ipAddress, " ")
-	i := strings.LastIndex(ipAddress, ":")
-	ipAddress = ipAddress[:i] // remove port
-	ipAddress = strings.TrimPrefix(ipAddress, "[")
-	ipAddress = strings.TrimSuffix(ipAddress, "]")
-	ip := net.ParseIP(ipAddress)
-	if ip != nil && ip.To4() == nil {
-		return true
-	} else {
-		return false
-	}
-}
+func validIP6(ipAddress string) boo
