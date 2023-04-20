@@ -683,7 +683,9 @@ func (s *Server) readRequest(ctx context.Context, r io.Reader) (req *protocol.Me
 	return req, err
 }
 
+// auth 授权操作，从元数据提取出 token，然后调用自定义的 AuthFunc
 func (s *Server) auth(ctx context.Context, req *protocol.Message) error {
+	// 如果不存在 AuthFunc，那么就无需授权
 	if s.AuthFunc != nil {
 		token := req.Metadata[share.AuthKey]
 		return s.AuthFunc(ctx, req, token)

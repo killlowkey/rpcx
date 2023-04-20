@@ -81,6 +81,7 @@ func (s *Server) startHTTP1APIGateway(ln net.Listener) {
 		s.mu.Unlock()
 	}
 
+	// 启动 HTTP 服务
 	if err := s.gatewayHTTPServer.Serve(ln); err != nil {
 		if errors.Is(err, ErrServerClosed) || errors.Is(err, cmux.ErrListenerClosed) || errors.Is(err, cmux.ErrServerClosed) {
 			log.Info("gateway server closed")
@@ -102,6 +103,8 @@ func (s *Server) closeHTTP1APIGateway(ctx context.Context) error {
 
 // handleGatewayRequest 处理 HTTP 请求
 // 1. 从请求头中读取元数据：ServicePath、Version、ID
+// 2. HTTP 请求封装成 RPC 请求进行处理
+// 3. 处理后得到 RPC 响应，转换成 HTTP 响应返回
 func (s *Server) handleGatewayRequest(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 	ctx := share.WithValue(r.Context(), RemoteConnContextKey, r.RemoteAddr) // notice: It is a string, different with TCP (net.Conn)
 	err := s.Plugins.DoPreReadRequest(ctx)
@@ -117,6 +120,7 @@ func (s *Server) handleGatewayRequest(w http.ResponseWriter, r *http.Request, pa
 	}
 	servicePath := r.Header.Get(XServicePath)
 	wh := w.Header()
+	// HTTP 请求转 RPC 请求
 	req, err := HTTPRequest2RpcxRequest(r)
 
 	// set headers
@@ -162,6 +166,7 @@ func (s *Server) handleGatewayRequest(w http.ResponseWriter, r *http.Request, pa
 	}
 
 	ctx.SetValue(StartRequestContextKey, time.Now().UnixNano())
+	// 授权操作
 	err = s.auth(ctx, req)
 	if err != nil {
 		s.Plugins.DoPreWriteResponse(ctx, req, nil, err)
@@ -176,6 +181,7 @@ func (s *Server) handleGatewayRequest(w http.ResponseWriter, r *http.Request, pa
 	newCtx := share.WithLocalValue(share.WithLocalValue(ctx, share.ReqMetaDataKey, req.Metadata),
 		share.ResMetaDataKey, resMetadata)
 
+	// RPC 响应，后续需要封装成 HTTP 响应
 	res, err := s.handleRequest(newCtx, req)
 
 	if err != nil {
@@ -211,6 +217,7 @@ func (s *Server) handleGatewayRequest(w http.ResponseWriter, r *http.Request, pa
 	for k, v := range res.Metadata {
 		meta.Add(k, v)
 	}
+	// 元数据写回响应头中，进行 URL 编码
 	wh.Set(XMeta, meta.Encode())
 	w.Write(res.Payload)
 	s.Plugins.DoPostWriteResponse(newCtx, req, res, err)
