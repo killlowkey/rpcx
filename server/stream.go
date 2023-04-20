@@ -17,6 +17,7 @@ import (
 var ErrNotAccept = errors.New("server refused the connection")
 
 // StreamHandler handles a streaming connection with client.
+// 流式处理
 type StreamHandler func(conn net.Conn, args *share.StreamServiceArgs)
 
 // StreamAcceptor accepts connection from clients or not.
@@ -57,7 +58,7 @@ func NewStreamService(addr string, streamHandler StreamHandler, acceptor StreamA
 	return fi
 }
 
-// EnableFileTransfer supports filetransfer service in this server.
+// EnableStreamService supports file-transfer service in this server.
 func (s *Server) EnableStreamService(serviceName string, streamService *StreamService) {
 	if serviceName == "" {
 		serviceName = share.StreamServiceName

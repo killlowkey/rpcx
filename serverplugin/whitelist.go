@@ -3,6 +3,7 @@ package serverplugin
 import "net"
 
 // WhitelistPlugin is a plugin that control only ip addresses in whitelist can access services.
+// 白名单机制，在白名单中的 ip 地址才可以访问
 type WhitelistPlugin struct {
 	Whitelist     map[string]bool
 	WhitelistMask []*net.IPNet // net.ParseCIDR("172.17.0.0/16") to get *net.IPNet
