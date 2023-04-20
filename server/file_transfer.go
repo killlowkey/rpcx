@@ -14,9 +14,11 @@ import (
 )
 
 // FileTransferHandler handles uploading file. Must close the connection after it finished.
+// 处理上传文件，上传完成必须关闭 connection
 type FileTransferHandler func(conn net.Conn, args *share.FileTransferArgs)
 
 // DownloadFileHandler handles downloading file. Must close the connection after it finished.
+// 处理下载文件，完成之后必须关闭 connection
 type DownloadFileHandler func(conn net.Conn, args *share.DownloadFileArgs)
 
 type tokenInfo struct {

@@ -102,6 +102,7 @@ type Server struct {
 	onRestart  []func(s *Server) // 重启时回调
 
 	// TLSConfig for creating tls tcp connection.
+	// tls 配置，用于配置加密的 connection
 	tlsConfig *tls.Config
 	// BlockCrypt for kcp.BlockCrypt
 	options map[string]interface{}
@@ -112,16 +113,18 @@ type Server struct {
 	Plugins PluginContainer // 插件容器
 
 	// AuthFunc can be used to auth.
-	// 授权
+	// 授权函数
 	AuthFunc func(ctx context.Context, req *protocol.Message, token string) error
 
 	handlerMsgNum int32 // 当前处理消息数量
 
 	// HandleServiceError is used to get all service errors. You can use it write logs or others.
+	// 获取所有服务端错误，可以写入到日志或者其它地方
 	HandleServiceError func(error)
 
 	// ServerErrorFunc is a customized error handlers and you can use it to return customized error strings to clients.
 	// If not set, it use err.Error()
+	//自定义的错误处理器，可以用于去返回自定义的错误内容给客户端，如果并未设置，将使用 err.Error()
 	ServerErrorFunc func(res *protocol.Message, err error) string
 }
 
@@ -137,6 +140,7 @@ func NewServer(options ...OptionFn) *Server {
 		AsyncWrite: false, // 除非你想做进一步的优化测试，否则建议你设置为false
 	}
 
+	// 遍历 Options 进行配置修改
 	for _, op := range options {
 		op(s)
 	}
@@ -148,6 +152,7 @@ func NewServer(options ...OptionFn) *Server {
 }
 
 // Address returns listened address.
+// 返回监听的地址
 func (s *Server) Address() net.Addr {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -157,11 +162,13 @@ func (s *Server) Address() net.Addr {
 	return s.ln.Addr()
 }
 
+// AddHandler 添加处理器，类似于路由机制
 func (s *Server) AddHandler(servicePath, serviceMethod string, handler func(*Context) error) {
 	s.router[servicePath+"."+serviceMethod] = handler
 }
 
 // ActiveClientConn returns active connections.
+// 返回当前持有的 connections
 func (s *Server) ActiveClientConn() []net.Conn {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -239,6 +246,7 @@ func (s *Server) Serve(network, address string) (err error) {
 
 // ServeListener listens RPC requests.
 // It is blocked until receiving connections from clients.
+// 监听 RPC 请求，阻塞等待接收客户端的连接
 func (s *Server) ServeListener(network string, ln net.Listener) (err error) {
 	defer s.UnregisterAll()
 
@@ -268,11 +276,13 @@ func (s *Server) serveListener(ln net.Listener) error {
 		conn, e := ln.Accept()
 		// 发生错误
 		if e != nil {
+			// 服务已经关闭，就没必要处理了
 			if s.isShutdown() {
 				<-s.doneChan
 				return ErrServerClosed
 			}
 
+			// 发生错误
 			if ne, ok := e.(net.Error); ok && ne.Temporary() {
 				if tempDelay == 0 {
 					tempDelay = 5 * time.Millisecond
@@ -296,7 +306,7 @@ func (s *Server) serveListener(ln net.Listener) error {
 		}
 		tempDelay = 0
 
-		// 设置 TCP 配置
+		// 设置 TCP 一些配置
 		if tc, ok := conn.(*net.TCPConn); ok {
 			period := s.options["TCPKeepAlivePeriod"]
 			if period != nil {
@@ -391,7 +401,7 @@ func (s *Server) sendResponse(ctx *share.Context, conn net.Conn, err error, req,
 	s.Plugins.DoPostWriteResponse(ctx, req, res, err)
 }
 
-// serveConn 处理 connection
+// serveConn 处理 connection，重点关注，服务端核心设计
 // 1. 关注序列化与反序列化
 // 2. 关注本地 RPC 方法调用
 // 3. 因为奔溃引发的问题处理
@@ -430,6 +440,7 @@ func (s *Server) serveConn(conn net.Conn) {
 		s.closeConn(conn)
 	}()
 
+	// tls connection 设置一些配置
 	if tlsConn, ok := conn.(*tls.Conn); ok {
 		if d := s.readTimeout; d != 0 {
 			conn.SetReadDeadline(time.Now().Add(d))
@@ -443,6 +454,7 @@ func (s *Server) serveConn(conn net.Conn) {
 		}
 	}
 
+	// 创建缓冲区，以后该连接的读都是采用该缓存区
 	r := bufio.NewReaderSize(conn, ReaderBuffsize)
 
 	// read requests and handle it
@@ -452,6 +464,8 @@ func (s *Server) serveConn(conn net.Conn) {
 			return
 		}
 
+		// 读取截止时间，当前时间加上读超时
+		// 在截止时间后没有读到数据，就报错
 		t0 := time.Now()
 		if s.readTimeout != 0 {
 			conn.SetReadDeadline(t0.Add(s.readTimeout))
@@ -503,6 +517,7 @@ func (s *Server) serveConn(conn net.Conn) {
 			closeConn = err != nil
 		}
 
+		// 处理发生错误
 		if err != nil {
 			if !req.IsOneway() { // return a error response
 				res := req.Clone()
@@ -518,6 +533,7 @@ func (s *Server) serveConn(conn net.Conn) {
 			}
 
 			// auth failed, closed the connection
+			// 授权失败，关闭该连接
 			if closeConn {
 				log.Infof("auth failed for conn %s: %v", conn.RemoteAddr().String(), err)
 				return
@@ -538,6 +554,7 @@ func (s *Server) serveConn(conn net.Conn) {
 }
 
 func (s *Server) processOneRequest(ctx *share.Context, req *protocol.Message, conn net.Conn) {
+	// 奔溃，打印调用栈
 	defer func() {
 		if r := recover(); r != nil {
 			buf := make([]byte, 1024)
@@ -567,11 +584,13 @@ func (s *Server) processOneRequest(ctx *share.Context, req *protocol.Message, co
 		return
 	}
 
+	// 整个函数跑完，取消 context
 	cancelFunc := parseServerTimeout(ctx, req)
 	if cancelFunc != nil {
 		defer cancelFunc()
 	}
 
+	// 响应元数据
 	resMetadata := make(map[string]string)
 	if req.Metadata == nil {
 		req.Metadata = make(map[string]string)
@@ -665,12 +684,14 @@ func (s *Server) closeConn(conn net.Conn) {
 	s.Plugins.DoPostConnClose(conn)
 }
 
+// readRequest 从 connection 读取请求
 func (s *Server) readRequest(ctx context.Context, r io.Reader) (req *protocol.Message, err error) {
 	err = s.Plugins.DoPreReadRequest(ctx)
 	if err != nil {
 		return nil, err
 	}
 	// pool req?
+	// 是否需要池化 request
 	req = protocol.NewMessage()
 	err = req.Decode(r)
 	if err == io.EOF {
@@ -695,6 +716,11 @@ func (s *Server) auth(ctx context.Context, req *protocol.Message) error {
 }
 
 // handleRequest 处理请求
+// 1. 从请求克隆响应
+// 2. 解码方法参数，查找对应的服务进行调用
+// 3. 归还 RPC 方法参数
+// 4. 调用错误，需要进行处理
+// 5. 返回响应
 func (s *Server) handleRequest(ctx context.Context, req *protocol.Message) (res *protocol.Message, err error) {
 	// RPC 方法基本信息
 	serviceName := req.ServicePath
@@ -768,8 +794,10 @@ func (s *Server) handleRequest(ctx context.Context, req *protocol.Message) (res 
 	}
 
 	// return argc to object pool
+	// 归还 argc 给对象池
 	reflectTypePools.Put(mtype.ArgType, argv)
 
+	// 出错，处理错误
 	if err != nil {
 		if replyv != nil {
 			data, err := codec.Encode(replyv)
@@ -783,7 +811,9 @@ func (s *Server) handleRequest(ctx context.Context, req *protocol.Message) (res 
 		return s.handleError(res, err)
 	}
 
+	// 非单向，需要返回响应
 	if !req.IsOneway() {
+		// 编码方法返回值
 		data, err := codec.Encode(replyv)
 		// return reply to object pool
 		reflectTypePools.Put(mtype.ReplyType, replyv)
@@ -882,7 +912,7 @@ func (s *Server) handleError(res *protocol.Message, err error) (*protocol.Messag
 // Can connect to RPC service using HTTP CONNECT to rpcPath.
 var connected = "200 Connected to rpcx"
 
-// ServeHTTP implements an http.Handler that answers RPC requests.
+// ServeHTTP implements a http.Handler that answers RPC requests.
 func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodConnect {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -904,6 +934,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	s.serveConn(conn)
 }
 
+// ServeWS 处理 web socket 连接
 func (s *Server) ServeWS(conn *websocket.Conn) {
 	s.mu.Lock()
 	s.activeConn[conn] = struct{}{}
@@ -918,10 +949,12 @@ func (s *Server) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// 关闭监听器
 	var err error
 	if s.ln != nil {
 		err = s.ln.Close()
 	}
+	// 遍历 connection 进行关闭
 	for c := range s.activeConn {
 		c.Close()
 		delete(s.activeConn, c)
@@ -929,6 +962,7 @@ func (s *Server) Close() error {
 	}
 	s.closeDoneChanLocked()
 
+	// 等待 10s 关闭 goroutine 池
 	if s.pool != nil {
 		s.pool.StopAndWaitFor(10 * time.Second)
 	}
@@ -938,6 +972,7 @@ func (s *Server) Close() error {
 
 // RegisterOnShutdown registers a function to call on Shutdown.
 // This can be used to gracefully shutdown connections.
+// 注册一个函数在 Shutdown 时来调用，可以用来实现优雅关闭连接
 func (s *Server) RegisterOnShutdown(f func(s *Server)) {
 	s.mu.Lock()
 	s.onShutdown = append(s.onShutdown, f)
@@ -945,6 +980,7 @@ func (s *Server) RegisterOnShutdown(f func(s *Server)) {
 }
 
 // RegisterOnRestart registers a function to call on Restart.
+// 注册一个函数在重启时来调用
 func (s *Server) RegisterOnRestart(f func(s *Server)) {
 	s.mu.Lock()
 	s.onRestart = append(s.onRestart, f)
@@ -1034,6 +1070,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 // Restart restarts this server gracefully.
 // It starts a new rpcx server with the same port with SO_REUSEPORT socket option,
 // and shutdown this rpcx server gracefully.
+// 优雅重启服务，使用相同的端口和 SO_REUSEPORT socket 选项启动一个新的 rpcx 服务，并且优雅的关闭当前的服务
 func (s *Server) Restart(ctx context.Context) error {
 	pid, err := s.startProcess()
 	if err != nil {
@@ -1042,70 +1079,3 @@ func (s *Server) Restart(ctx context.Context) error {
 	log.Infof("restart a new rpcx server: %d", pid)
 
 	// TODO: is it necessary?
-	time.Sleep(3 * time.Second)
-	return s.Shutdown(ctx)
-}
-
-func (s *Server) startProcess() (int, error) {
-	argv0, err := exec.LookPath(os.Args[0])
-	if err != nil {
-		return 0, err
-	}
-
-	// Pass on the environment and replace the old count key with the new one.
-	var env []string
-	env = append(env, os.Environ()...)
-
-	originalWD, _ := os.Getwd()
-	allFiles := []*os.File{os.Stdin, os.Stdout, os.Stderr}
-	process, err := os.StartProcess(argv0, os.Args, &os.ProcAttr{
-		Dir:   originalWD,
-		Env:   env,
-		Files: allFiles,
-	})
-	if err != nil {
-		return 0, err
-	}
-	return process.Pid, nil
-}
-
-func (s *Server) checkProcessMsg() bool {
-	size := atomic.LoadInt32(&s.handlerMsgNum)
-	log.Info("need handle in-processing msg size:", size)
-	return size == 0
-}
-
-func (s *Server) closeDoneChanLocked() {
-	select {
-	case <-s.doneChan:
-		// Already closed. Don't close again.
-	default:
-		// Safe to close here. We're the only closer, guarded
-		// by s.mu.RegisterName
-		close(s.doneChan)
-	}
-}
-
-var ip4Reg = regexp.MustCompile(`^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$`)
-
-func validIP4(ipAddress string) bool {
-	ipAddress = strings.Trim(ipAddress, " ")
-	i := strings.LastIndex(ipAddress, ":")
-	ipAddress = ipAddress[:i] // remove port
-
-	return ip4Reg.MatchString(ipAddress)
-}
-
-func validIP6(ipAddress string) bool {
-	ipAddress = strings.Trim(ipAddress, " ")
-	i := strings.LastIndex(ipAddress, ":")
-	ipAddress = ipAddress[:i] // remove port
-	ipAddress = strings.TrimPrefix(ipAddress, "[")
-	ipAddress = strings.TrimSuffix(ipAddress, "]")
-	ip := net.ParseIP(ipAddress)
-	if ip != nil && ip.To4() == nil {
-		return true
-	} else {
-		return false
-	}
-}

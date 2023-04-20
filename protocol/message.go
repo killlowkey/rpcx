@@ -89,7 +89,6 @@ const (
 	ProtoBuffer
 	// MsgPack for payload
 	MsgPack
-	// Thrift
 	// Thrift for payload
 	Thrift
 	// JSONIterCodec for payload

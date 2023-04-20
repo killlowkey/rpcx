@@ -20,12 +20,15 @@ func (h *HeartbeatHandler) HeartbeatRequest(ctx context.Context, req *protocol.M
 }
 
 // TestPluginHeartbeat: go test -v -test.run TestPluginHeartbeat
+// 1. 启动服务端
+// 2. 启动客户端
 func TestPluginHeartbeat(t *testing.T) {
 	h := &HeartbeatHandler{}
 	s := NewServer(
 		WithReadTimeout(time.Duration(5)*time.Second),
 		WithWriteTimeout(time.Duration(5)*time.Second),
 	)
+	// 添加插件
 	s.Plugins.Add(h)
 	s.RegisterName("Arith", new(Arith), "")
 	wg := sync.WaitGroup{}

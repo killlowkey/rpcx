@@ -8,6 +8,7 @@ import (
 )
 
 // OptionFn configures options of server.
+// Option 在中间件设计中很常见，一般用于扩展点增强
 type OptionFn func(*Server)
 
 // // WithOptions sets multiple options.
@@ -20,6 +21,7 @@ type OptionFn func(*Server)
 // }
 
 // WithTLSConfig sets tls.Config.
+// TLS 配置
 func WithTLSConfig(cfg *tls.Config) OptionFn {
 	return func(s *Server) {
 		s.tlsConfig = cfg
@@ -27,6 +29,7 @@ func WithTLSConfig(cfg *tls.Config) OptionFn {
 }
 
 // WithReadTimeout sets readTimeout.
+// 设置读超时
 func WithReadTimeout(readTimeout time.Duration) OptionFn {
 	return func(s *Server) {
 		s.readTimeout = readTimeout
@@ -34,6 +37,7 @@ func WithReadTimeout(readTimeout time.Duration) OptionFn {
 }
 
 // WithWriteTimeout sets writeTimeout.
+// 写超时
 func WithWriteTimeout(writeTimeout time.Duration) OptionFn {
 	return func(s *Server) {
 		s.writeTimeout = writeTimeout
@@ -55,6 +59,7 @@ func WithCustomPool(pool WorkerPool) OptionFn {
 }
 
 // WithAsyncWrite sets AsyncWrite to true.
+// 异步写
 func WithAsyncWrite() OptionFn {
 	return func(s *Server) {
 		s.AsyncWrite = true

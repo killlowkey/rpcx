@@ -10,6 +10,7 @@ import (
 	"github.com/smallnest/rpcx/share"
 )
 
+// HTTP 请求头名称
 const (
 	XVersion           = "X-RPCX-Version"
 	XMessageType       = "X-RPCX-MessageType"
@@ -25,6 +26,7 @@ const (
 )
 
 // HTTPRequest2RpcxRequest converts a http request to a rpcx request.
+// 将 HTTP 请求转换为 RPCX 请求
 func HTTPRequest2RpcxRequest(r *http.Request) (*protocol.Message, error) {
 	req := protocol.NewMessage()
 	req.SetMessageType(protocol.Request)
@@ -44,6 +46,7 @@ func HTTPRequest2RpcxRequest(r *http.Request) (*protocol.Message, error) {
 		req.SetHeartbeat(true)
 	}
 
+	// 单向
 	oneway := h.Get(XOneway)
 	if oneway != "" {
 		req.SetOneway(true)

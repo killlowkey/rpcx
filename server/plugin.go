@@ -11,6 +11,7 @@ import (
 
 // PluginContainer represents a plugin container that defines all methods to manage plugins.
 // And it also defines all extension points.
+// 表示一个插件容器，定义方法来去管理插件，也定义了所有扩展点
 type PluginContainer interface {
 	Add(plugin Plugin)
 	Remove(plugin Plugin)
@@ -131,7 +132,7 @@ func (p *pluginContainer) Add(plugin Plugin) {
 	p.plugins = append(p.plugins, plugin)
 }
 
-// Remove removes a plugin by it's name.
+// Remove removes a plugin by its name.
 func (p *pluginContainer) Remove(plugin Plugin) {
 	if p.plugins == nil {
 		return
