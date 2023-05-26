@@ -9,15 +9,17 @@ import (
 )
 
 // Context represents a rpcx FastCall context.
+// 表示一个快速调用的 context
 type Context struct {
-	conn net.Conn
-	req  *protocol.Message
-	ctx  *share.Context
+	conn net.Conn          // 底层连接
+	req  *protocol.Message // 请求
+	ctx  *share.Context    // 上下文用于存储元数据
 
-	async bool
+	async bool // 是否为异步
 }
 
 // NewContext creates a server.Context for Handler.
+// 为 Handler 创建 server.Context
 func NewContext(ctx *share.Context, conn net.Conn, req *protocol.Message, async bool) *Context {
 	return &Context{conn: conn, req: req, ctx: ctx, async: async}
 }
@@ -64,6 +66,7 @@ func (ctx *Context) ServiceMethod() string {
 }
 
 // Bind parses the body data and stores the result to v.
+// 反序列化 body 数据为 v
 func (ctx *Context) Bind(v interface{}) error {
 	req := ctx.req
 	if v != nil {
@@ -80,6 +83,7 @@ func (ctx *Context) Bind(v interface{}) error {
 	return nil
 }
 
+// Write 写入 v 到响应
 func (ctx *Context) Write(v interface{}) error {
 	req := ctx.req
 

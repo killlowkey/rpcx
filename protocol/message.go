@@ -106,6 +106,7 @@ type Message struct {
 }
 
 // NewMessage creates an empty message.
+// 创建一个 Message 实例
 func NewMessage() *Message {
 	header := Header([12]byte{})
 	header[0] = magicNumber
@@ -116,7 +117,7 @@ func NewMessage() *Message {
 }
 
 // Header is the first part of Message and has fixed size.
-// Format:
+// 消息的第一部分，12 bytes 固定大小
 type Header [12]byte
 
 // CheckMagicNumber checks whether header starts rpcx magic number.
@@ -213,7 +214,7 @@ func (h *Header) SetSeq(seq uint64) {
 	binary.BigEndian.PutUint64(h[4:], seq)
 }
 
-// Clone clones from an message.
+// Clone clones from a message.
 func (m Message) Clone() *Message {
 	header := *m.Header
 	c := NewMessage()
@@ -289,6 +290,7 @@ func PutData(data *[]byte) {
 }
 
 // WriteTo writes message to writers.
+// 写回响应
 func (m Message) WriteTo(w io.Writer) (int64, error) {
 	nn, err := w.Write(m.Header[:])
 	n := int64(nn)
@@ -375,6 +377,7 @@ func encodeMetadata(m map[string]string, bb *bytes.Buffer) {
 	}
 }
 
+// decodeMetadata 解码元数据，binary -> struct
 func decodeMetadata(l uint32, data []byte) (map[string]string, error) {
 	m := make(map[string]string, 10)
 	n := uint32(0)

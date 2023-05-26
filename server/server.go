@@ -122,9 +122,9 @@ type Server struct {
 	// 获取所有服务端错误，可以写入到日志或者其它地方
 	HandleServiceError func(error)
 
-	// ServerErrorFunc is a customized error handlers and you can use it to return customized error strings to clients.
+	// ServerErrorFunc is a customized error handlers, and you can use it to return customized error strings to clients.
 	// If not set, it use err.Error()
-	//自定义的错误处理器，可以用于去返回自定义的错误内容给客户端，如果并未设置，将使用 err.Error()
+	// 自定义的错误处理器，用于返回自定义错误内容给客户端，如果并未设置，将使用 err.Error()
 	ServerErrorFunc func(res *protocol.Message, err error) string
 }
 
@@ -371,33 +371,31 @@ func (s *Server) sendResponse(ctx *share.Context, conn net.Conn, err error, req,
 
 	s.Plugins.DoPreWriteResponse(ctx, req, res, err)
 
+	// 对数据进行编码，得到二进制数据
 	data := res.EncodeSlicePointer()
-	if s.AsyncWrite {
-		if s.pool != nil {
-			s.pool.Submit(func() {
-				if s.writeTimeout != 0 {
-					conn.SetWriteDeadline(time.Now().Add(s.writeTimeout))
-				}
-				conn.Write(*data)
-				protocol.PutData(data)
-			})
-		} else {
-			go func() {
-				if s.writeTimeout != 0 {
-					conn.SetWriteDeadline(time.Now().Add(s.writeTimeout))
-				}
-				conn.Write(*data)
-				protocol.PutData(data)
-			}()
-		}
 
-	} else {
+	// 抽出一个函数实现写
+	writeData := func() {
 		if s.writeTimeout != 0 {
 			conn.SetWriteDeadline(time.Now().Add(s.writeTimeout))
 		}
 		conn.Write(*data)
 		protocol.PutData(data)
 	}
+
+	// 异步写，就提交给 goroutine（池化/新建） 写
+	if s.AsyncWrite {
+		// 当前没有池化
+		if s.pool != nil {
+			s.pool.Submit(writeData)
+		} else {
+			go writeData()
+		}
+	} else {
+		// 同步写
+		writeData()
+	}
+
 	s.Plugins.DoPostWriteResponse(ctx, req, res, err)
 }
 
@@ -553,6 +551,7 @@ func (s *Server) serveConn(conn net.Conn) {
 	}
 }
 
+// processOneRequest 处理请求，重点关注
 func (s *Server) processOneRequest(ctx *share.Context, req *protocol.Message, conn net.Conn) {
 	// 奔溃，打印调用栈
 	defer func() {
@@ -584,7 +583,7 @@ func (s *Server) processOneRequest(ctx *share.Context, req *protocol.Message, co
 		return
 	}
 
-	// 整个函数跑完，取消 context
+	// 解析超时，整个函数跑完后，取消 context
 	cancelFunc := parseServerTimeout(ctx, req)
 	if cancelFunc != nil {
 		defer cancelFunc()
@@ -605,7 +604,7 @@ func (s *Server) processOneRequest(ctx *share.Context, req *protocol.Message, co
 	}
 
 	// use handlers first
-	// 首先使用 handlers
+	// 首先使用 handlers，自定义的路由
 	if handler, ok := s.router[req.ServicePath+"."+req.ServiceMethod]; ok {
 		sctx := NewContext(ctx, conn, req, s.AsyncWrite)
 		err := handler(sctx)
@@ -650,21 +649,25 @@ func (s *Server) processOneRequest(ctx *share.Context, req *protocol.Message, co
 	}
 }
 
+// parseServerTimeout 解析服务端超时时间，封装成 context.Context
 func parseServerTimeout(ctx *share.Context, req *protocol.Message) context.CancelFunc {
 	if req == nil || req.Metadata == nil {
 		return nil
 	}
 
+	// 从元数据中读取超时时间文本
 	st := req.Metadata[share.ServerTimeout]
 	if st == "" {
 		return nil
 	}
 
+	// 解析超时
 	timeout, err := strconv.ParseInt(st, 10, 64)
 	if err != nil {
 		return nil
 	}
 
+	// 创建 context
 	newCtx, cancel := context.WithTimeout(ctx.Context, time.Duration(timeout)*time.Millisecond)
 	ctx.Context = newCtx
 	return cancel
@@ -894,6 +897,7 @@ func (s *Server) handleRequestForFunction(ctx context.Context, req *protocol.Mes
 	return res, nil
 }
 
+// handleError 处理错误
 func (s *Server) handleError(res *protocol.Message, err error) (*protocol.Message, error) {
 	res.SetMessageStatusType(protocol.Error)
 	if res.Metadata == nil {
@@ -1079,3 +1083,70 @@ func (s *Server) Restart(ctx context.Context) error {
 	log.Infof("restart a new rpcx server: %d", pid)
 
 	// TODO: is it necessary?
+	time.Sleep(3 * time.Second)
+	return s.Shutdown(ctx)
+}
+
+func (s *Server) startProcess() (int, error) {
+	argv0, err := exec.LookPath(os.Args[0])
+	if err != nil {
+		return 0, err
+	}
+
+	// Pass on the environment and replace the old count key with the new one.
+	var env []string
+	env = append(env, os.Environ()...)
+
+	originalWD, _ := os.Getwd()
+	allFiles := []*os.File{os.Stdin, os.Stdout, os.Stderr}
+	process, err := os.StartProcess(argv0, os.Args, &os.ProcAttr{
+		Dir:   originalWD,
+		Env:   env,
+		Files: allFiles,
+	})
+	if err != nil {
+		return 0, err
+	}
+	return process.Pid, nil
+}
+
+func (s *Server) checkProcessMsg() bool {
+	size := atomic.LoadInt32(&s.handlerMsgNum)
+	log.Info("need handle in-processing msg size:", size)
+	return size == 0
+}
+
+func (s *Server) closeDoneChanLocked() {
+	select {
+	case <-s.doneChan:
+		// Already closed. Don't close again.
+	default:
+		// Safe to close here. We're the only closer, guarded
+		// by s.mu.RegisterName
+		close(s.doneChan)
+	}
+}
+
+var ip4Reg = regexp.MustCompile(`^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$`)
+
+func validIP4(ipAddress string) bool {
+	ipAddress = strings.Trim(ipAddress, " ")
+	i := strings.LastIndex(ipAddress, ":")
+	ipAddress = ipAddress[:i] // remove port
+
+	return ip4Reg.MatchString(ipAddress)
+}
+
+func validIP6(ipAddress string) bool {
+	ipAddress = strings.Trim(ipAddress, " ")
+	i := strings.LastIndex(ipAddress, ":")
+	ipAddress = ipAddress[:i] // remove port
+	ipAddress = strings.TrimPrefix(ipAddress, "[")
+	ipAddress = strings.TrimSuffix(ipAddress, "]")
+	ip := net.ParseIP(ipAddress)
+	if ip != nil && ip.To4() == nil {
+		return true
+	} else {
+		return false
+	}
+}
