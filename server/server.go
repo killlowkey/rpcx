@@ -351,6 +351,7 @@ func (s *Server) serveByHTTP(ln net.Listener, rpcPath string) {
 	srv.Serve(ln)
 }
 
+// serveByWS 服务 Websocket 请求
 func (s *Server) serveByWS(ln net.Listener, rpcPath string) {
 	s.ln = ln
 
@@ -364,11 +365,14 @@ func (s *Server) serveByWS(ln net.Listener, rpcPath string) {
 	srv.Serve(ln)
 }
 
+// sendResponse 返回响应，写响应要么池化 Goroutine、开启新的 Goroutine、同步写（当前 Goroutine 写数据）
 func (s *Server) sendResponse(ctx *share.Context, conn net.Conn, err error, req, res *protocol.Message) {
+	// payload 大于 1024 并且开启了压缩，则设置压缩类型
 	if len(res.Payload) > 1024 && req.CompressType() != protocol.None {
 		res.SetCompressType(req.CompressType())
 	}
 
+	// 调用插件写响应之前的回调
 	s.Plugins.DoPreWriteResponse(ctx, req, res, err)
 
 	// 对数据进行编码，得到二进制数据
@@ -396,10 +400,12 @@ func (s *Server) sendResponse(ctx *share.Context, conn net.Conn, err error, req,
 		writeData()
 	}
 
+	// 调用插件写响应之后的回调
 	s.Plugins.DoPostWriteResponse(ctx, req, res, err)
 }
 
 // serveConn 处理 connection，重点关注，服务端核心设计
+// 每个链接对应一个 Goroutine，而链接中每个请求交由池化 Goroutine 处理或者开启新的 Goroutine
 // 1. 关注序列化与反序列化
 // 2. 关注本地 RPC 方法调用
 // 3. 因为奔溃引发的问题处理
@@ -456,6 +462,7 @@ func (s *Server) serveConn(conn net.Conn) {
 	r := bufio.NewReaderSize(conn, ReaderBuffsize)
 
 	// read requests and handle it
+	// 读取请求并处理
 	for {
 		// 服务关闭了，就无须处理
 		if s.isShutdown() {
@@ -475,6 +482,7 @@ func (s *Server) serveConn(conn net.Conn) {
 		// read a request from the underlying connection
 		// 从底层的连接中读取请求
 		req, err := s.readRequest(ctx, r)
+		// 读取时发生错误：EOF、链接关闭、请求限流
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				log.Infof("client has closed this connection: %s", conn.RemoteAddr().String())
@@ -490,6 +498,7 @@ func (s *Server) serveConn(conn net.Conn) {
 				} else { // Oneway and only call the plugins
 					s.Plugins.DoPreWriteResponse(ctx, req, nil, err)
 				}
+				// 无需处理该请求，跳出来重新读取请求
 				continue
 			} else { // wrong data
 				log.Warnf("rpcx: failed to read request: %v", err)
@@ -510,6 +519,7 @@ func (s *Server) serveConn(conn net.Conn) {
 		ctx = share.WithLocalValue(ctx, StartRequestContextKey, time.Now().UnixNano())
 		closeConn := false
 		// 非健康检查请求，需要授权
+		// 元数据需要携带授权数据，似乎每个请求都需要授权？
 		if !req.IsHeartbeat() {
 			err = s.auth(ctx, req)
 			closeConn = err != nil
@@ -540,6 +550,8 @@ func (s *Server) serveConn(conn net.Conn) {
 		}
 
 		// 池化（对于 goroutine）处理
+		// 对 Goroutine 进行池化，是为了复用 Goroutine，从而减少 Goroutine 创建和销毁的开销
+		// 池化思想在中间件设计中特别常见，可以对线程、协程、内存、对象等进行池化
 		if s.pool != nil {
 			s.pool.Submit(func() {
 				s.processOneRequest(ctx, req, conn)
@@ -627,11 +639,16 @@ func (s *Server) processOneRequest(ctx *share.Context, req *protocol.Message, co
 
 	// 非单向请求，需要处理响应元数据
 	if !req.IsOneway() {
-		if len(resMetadata) > 0 { // copy meta in context to responses
+		// copy meta in context to responses
+		// 拷贝 context 中的元数据到响应中
+		if len(resMetadata) > 0 {
+			// 响应数据库
 			meta := res.Metadata
+			// 没有直接赋值
 			if meta == nil {
 				res.Metadata = resMetadata
 			} else {
+				// 补充响应元数据不存在 key
 				for k, v := range resMetadata {
 					if meta[k] == "" {
 						meta[k] = v
@@ -677,13 +694,17 @@ func (s *Server) isShutdown() bool {
 	return atomic.LoadInt32(&s.inShutdown) == 1
 }
 
+// closeConn 关闭连接
 func (s *Server) closeConn(conn net.Conn) {
 	s.mu.Lock()
+	// remove this connection from activeConn
 	delete(s.activeConn, conn)
 	s.mu.Unlock()
 
+	// close connection
 	conn.Close()
 
+	// invoke plugin's DoPostConnClose method
 	s.Plugins.DoPostConnClose(conn)
 }
 
@@ -693,8 +714,7 @@ func (s *Server) readRequest(ctx context.Context, r io.Reader) (req *protocol.Me
 	if err != nil {
 		return nil, err
 	}
-	// pool req?
-	// 是否需要池化 request
+	// pool req? 是否需要池化 request
 	req = protocol.NewMessage()
 	err = req.Decode(r)
 	if err == io.EOF {
@@ -941,10 +961,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 // ServeWS 处理 web socket 连接
 func (s *Server) ServeWS(conn *websocket.Conn) {
 	s.mu.Lock()
+	// 保存该连接
 	s.activeConn[conn] = struct{}{}
 	s.mu.Unlock()
 
+	// 二进制类型数据
 	conn.PayloadType = websocket.BinaryFrame
+	// 调用统一的处理链接方法
 	s.serveConn(conn)
 }
 
