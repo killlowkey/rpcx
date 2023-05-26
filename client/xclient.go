@@ -37,30 +37,48 @@ var (
 )
 
 // Receipt represents the result of the service returned.
+// 表示服务返回的接口
 type Receipt struct {
-	Address string
-	Reply   interface{}
-	Error   error
+	Address string      // 服务地址
+	Reply   interface{} // 返回数据
+	Error   error       // 错误信息
 }
 
 // XClient is an interface that used by client with service discovery and service governance.
 // One XClient is used only for one service. You should create multiple XClient for multiple services.
+// XClient 是一个接口，用于客户端服务发现和服务治理
+// 一个 XClient 只由一个服务使用，多个服务应该创建多个 XClient
 type XClient interface {
+	// SetPlugins 设置插件容器
 	SetPlugins(plugins PluginContainer)
+	// GetPlugins 获取插件容器
 	GetPlugins() PluginContainer
+	// SetSelector 设置选择器，用于选择合适的节点
 	SetSelector(s Selector)
+	// ConfigGeoSelector 配置地理位置选择器
 	ConfigGeoSelector(latitude, longitude float64)
+	// Auth 设置授权 token
 	Auth(auth string)
 
+	// Go 异步调用 RPC
 	Go(ctx context.Context, serviceMethod string, args interface{}, reply interface{}, done chan *Call) (*Call, error)
+	// Call 同步调用 RPC
 	Call(ctx context.Context, serviceMethod string, args interface{}, reply interface{}) error
+	// Broadcast 发送请求到所有服务，当所有服务都会成功，才会成功
 	Broadcast(ctx context.Context, serviceMethod string, args interface{}, reply interface{}) error
+	// Fork 发送请求到所有服务，当其中一个服务返回成功，才成功
 	Fork(ctx context.Context, serviceMethod string, args interface{}, reply interface{}) error
+	// Inform 发送请求到所有服务，返回所有服务的返回结果
 	Inform(ctx context.Context, serviceMethod string, args interface{}, reply interface{}) ([]Receipt, error)
+	// SendRaw 发送原生消息给服务，第一个返回参数为响应元数据，第一个参数为响应 payload
 	SendRaw(ctx context.Context, r *protocol.Message) (map[string]string, []byte, error)
+	// SendFile 发送文件给服务
 	SendFile(ctx context.Context, fileName string, rateInBytesPerSecond int64, meta map[string]string) error
+	// DownloadFile 从服务下载文件
 	DownloadFile(ctx context.Context, requestFileName string, saveTo io.Writer, meta map[string]string) error
+	// Stream 获取流式 Connection
 	Stream(ctx context.Context, meta map[string]string) (net.Conn, error)
+	// Close 关闭 XClient
 	Close() error
 }
 
@@ -85,12 +103,19 @@ type KVPair struct {
 type ServiceDiscoveryFilter func(kvp *KVPair) bool
 
 // ServiceDiscovery defines ServiceDiscovery of zookeeper, etcd and consul
+// 定义服务发现接口，用于 Zookeeper、ETCD、Consul
 type ServiceDiscovery interface {
+	// GetServices 获取所有服务
 	GetServices() []*KVPair
+	// WatchService 观察服务，当服务新增、删除和修改会进行通知
 	WatchService() chan []*KVPair
+	// RemoveWatcher 移除观察器
 	RemoveWatcher(ch chan []*KVPair)
+	// Clone 克隆指定 path，返回一个 ServiceDiscovery
 	Clone(servicePath string) (ServiceDiscovery, error)
+	// SetFilter 设置过滤器，来过滤不必要的服务
 	SetFilter(ServiceDiscoveryFilter)
+	// Close 关闭服务发现
 	Close()
 }
 
@@ -123,6 +148,7 @@ type xClient struct {
 }
 
 // NewXClient creates a XClient that supports service discovery and service governance.
+// 创建一个支持服务发现和服务治理的 XClient
 func NewXClient(servicePath string, failMode FailMode, selectMode SelectMode, discovery ServiceDiscovery, option Option) XClient {
 	client := &xClient{
 		failMode:        failMode,
@@ -134,7 +160,9 @@ func NewXClient(servicePath string, failMode FailMode, selectMode SelectMode, di
 		option:          option,
 	}
 
+	// 获取服务发现中所有服务
 	pairs := discovery.GetServices()
+	// 排序
 	sort.Slice(pairs, func(i, j int) bool {
 		return strings.Compare(pairs[i].Key, pairs[j].Key) <= 0
 	})
@@ -142,18 +170,23 @@ func NewXClient(servicePath string, failMode FailMode, selectMode SelectMode, di
 	for _, p := range pairs {
 		servers[p.Key] = p.Value
 	}
+	// 根据状态过滤和分组
 	filterByStateAndGroup(client.option.Group, servers)
 
+	// 选择合适的选择器
 	client.servers = servers
 	if selectMode != Closest && selectMode != SelectByUser {
 		client.selector = newSelector(selectMode, servers)
 	}
 
+	// 初始化插件
 	client.Plugins = &pluginContainer{}
 
+	// 观察服务发现中的服务变化
 	ch := client.discovery.WatchService()
 	if ch != nil {
 		client.ch = ch
+		// 创建一个新的 Goroutine，用于服务增删改
 		go client.watch(ch)
 	}
 
@@ -220,6 +253,10 @@ func (c *xClient) Auth(auth string) {
 }
 
 // watch changes of service and update cached clients.
+// 观察服务变化和更新缓存的客户端
+// 1. 排序
+// 2. 过滤和分组
+// 3. 更新选择器
 func (c *xClient) watch(ch chan []*KVPair) {
 	for pairs := range ch {
 		sort.Slice(pairs, func(i, j int) bool {

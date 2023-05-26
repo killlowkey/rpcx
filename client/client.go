@@ -93,20 +93,31 @@ const (
 type seqKey struct{}
 
 // RPCClient is interface that defines one client to call one server.
+// RPC 客户端，用于调用服务
 type RPCClient interface {
+	// Connect 连接到指定服务
 	Connect(network, address string) error
+	// Go 异步调用 RPC
 	Go(ctx context.Context, servicePath, serviceMethod string, args interface{}, reply interface{}, done chan *Call) *Call
+	// Call 同步调用 RPC
 	Call(ctx context.Context, servicePath, serviceMethod string, args interface{}, reply interface{}) error
+	// SendRaw 发送原生的信息
 	SendRaw(ctx context.Context, r *protocol.Message) (map[string]string, []byte, error)
+	// Close 关闭客户端
 	Close() error
+	// RemoteAddr 远程服务地址
 	RemoteAddr() string
 
+	// RegisterServerMessageChan 注册 Channel，用于获取服务端请求
 	RegisterServerMessageChan(ch chan<- *protocol.Message)
 	UnregisterServerMessageChan()
 
+	// IsClosing 是否正在关闭
 	IsClosing() bool
+	// IsShutdown 是否已经关闭
 	IsShutdown() bool
 
+	// GetConn 获取底层连接
 	GetConn() net.Conn
 }
 

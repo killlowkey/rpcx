@@ -43,7 +43,7 @@ func NewDefaultLogger(out io.Writer, prefix string, flag int, lv Level) *default
 	// set default level to error
 	level := lv
 
-	// read level from system enviroment to override
+	// read level from system environment to override
 	levelStr := os.Getenv("RPCX_LOG_LEVEL")
 	if len(levelStr) != 0 {
 		if vl, err := strconv.Atoi(levelStr); err == nil {
