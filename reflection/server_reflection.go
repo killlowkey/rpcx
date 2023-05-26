@@ -78,7 +78,9 @@ func (r *Reflection) Register(name string, rcvr interface{}, metadata string) er
 	val := reflect.ValueOf(rcvr)
 	typ := reflect.TypeOf(rcvr)
 	vTyp := reflect.Indirect(val).Type()
+	// Struct 名称
 	si.Name = vTyp.Name()
+	// Struct 所在 package 路径
 	pkg := vTyp.PkgPath()
 	if strings.Index(pkg, ".") > 0 {
 		pkg = pkg[strings.LastIndex(pkg, ".")+1:]
@@ -87,6 +89,7 @@ func (r *Reflection) Register(name string, rcvr interface{}, metadata string) er
 	pkg = strings.ReplaceAll(pkg, "-", "_")
 	si.PkgPath = pkg
 
+	// 遍历 Struct 中所有方法
 	for m := 0; m < val.NumMethod(); m++ {
 		method := typ.Method(m)
 		mtype := method.Type
@@ -97,6 +100,7 @@ func (r *Reflection) Register(name string, rcvr interface{}, metadata string) er
 		if mtype.NumIn() != 4 {
 			continue
 		}
+		// 下面校验方法参数是否符合 rpcx 方法要求
 		// First arg must be context.Context
 		ctxType := mtype.In(1)
 		if !ctxType.Implements(typeOfContext) {
@@ -126,6 +130,7 @@ func (r *Reflection) Register(name string, rcvr interface{}, metadata string) er
 			continue
 		}
 
+		// 封装方法信息
 		mi := &MethodInfo{}
 		mi.Name = method.Name
 
@@ -134,8 +139,10 @@ func (r *Reflection) Register(name string, rcvr interface{}, metadata string) er
 		}
 		replyType = replyType.Elem()
 
+		// 请求名
 		mi.ReqName = argType.Name()
 		mi.Req = generateTypeDefination(mi.ReqName, si.PkgPath, generateJSON(argType))
+		// 回复名
 		mi.ReplyName = replyType.Name()
 		mi.Reply = generateTypeDefination(mi.ReplyName, si.PkgPath, generateJSON(replyType))
 

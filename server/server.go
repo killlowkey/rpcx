@@ -1110,6 +1110,7 @@ func (s *Server) Restart(ctx context.Context) error {
 	return s.Shutdown(ctx)
 }
 
+// startProcess 启动进程，返回进程号
 func (s *Server) startProcess() (int, error) {
 	argv0, err := exec.LookPath(os.Args[0])
 	if err != nil {
@@ -1117,6 +1118,7 @@ func (s *Server) startProcess() (int, error) {
 	}
 
 	// Pass on the environment and replace the old count key with the new one.
+	// 传递 environment，并替换旧的 count key
 	var env []string
 	env = append(env, os.Environ()...)
 

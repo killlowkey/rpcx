@@ -9,7 +9,7 @@ import (
 )
 
 // Context represents a rpcx FastCall context.
-// 表示一个快速调用的 context
+// 表示一个 rpcx 快速调用的 context
 type Context struct {
 	conn net.Conn          // 底层连接
 	req  *protocol.Message // 请求

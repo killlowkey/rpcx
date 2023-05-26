@@ -48,7 +48,6 @@ func (p *ThriftColorGroup) Read(ctx context.Context, iprot thrift.TProtocol) err
     return thrift.PrependError(fmt.Sprintf("%T read error: ", p), err)
   }
 
-
   for {
     _, fieldTypeId, fieldId, err := iprot.ReadFieldBegin(ctx)
     if err != nil {

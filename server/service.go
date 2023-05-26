@@ -45,6 +45,7 @@ type service struct {
 	function map[string]*functionType // registered functions
 }
 
+// isExported 该服务是否暴露
 func isExported(name string) bool {
 	rune, _ := utf8.DecodeRuneInString(name)
 	return unicode.IsUpper(rune)
@@ -61,6 +62,7 @@ func isExportedOrBuiltinType(t reflect.Type) bool {
 
 // Register publishes in the server the set of methods of the
 // receiver value that satisfy the following conditions:
+// 在服务中，发布 receiver 满足下列条件的一系列方法
 //   - exported method of exported type
 //   - three arguments, the first is of context.Context, both of exported type for three arguments
 //   - the third argument is a pointer
@@ -68,8 +70,10 @@ func isExportedOrBuiltinType(t reflect.Type) bool {
 //
 // It returns an error if the receiver is not an exported type or has
 // no suitable methods. It also logs the error.
+// 如果 receiver 没有公开类型或者没有合适方法，会返回并记录该错误
 // The client accesses each method using a string of the form "Type.Method",
 // where Type is the receiver's concrete type.
+// 客户端使用 Type.Method 形式，访问每一个方法，type 是 receiver 的合适类型
 func (s *Server) Register(rcvr interface{}, metadata string) error {
 	// 服务注册
 	sname, err := s.register(rcvr, "", false)
