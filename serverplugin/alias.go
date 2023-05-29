@@ -19,7 +19,8 @@ type AliasPlugin struct {
 	ReseverseAliases map[string]*aliasPair // 别名反转 example：person.add -> person#add
 }
 
-// Alias sets a alias for the serviceMethod.
+// Alias sets an alias for the serviceMethod.
+// 为 serviceMethod 设置一个别名
 // For example Alias("anewpath&method", "Arith.mul")
 func (p *AliasPlugin) Alias(aliasServicePath, aliasServiceMethod string, servicePath, serviceMethod string) {
 	p.Aliases[aliasServicePath+"."+aliasServiceMethod] = &aliasPair{
@@ -33,6 +34,7 @@ func (p *AliasPlugin) Alias(aliasServicePath, aliasServiceMethod string, service
 }
 
 // NewAliasPlugin creates a new NewAliasPlugin
+// 创建新的 NewAliasPlugin
 func NewAliasPlugin() *AliasPlugin {
 	return &AliasPlugin{
 		Aliases:          make(map[string]*aliasPair),
@@ -62,6 +64,7 @@ func (p *AliasPlugin) PostReadRequest(ctx context.Context, r *protocol.Message, 
 }
 
 // PreWriteResponse restore servicePath and serviceMethod.
+// 恢复 servicePath 和 serviceMethod
 func (p *AliasPlugin) PreWriteResponse(ctx context.Context, r *protocol.Message, res *protocol.Message) error {
 	if r.Metadata[aliasAppliedKey] != "true" {
 		return nil

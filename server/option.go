@@ -45,6 +45,7 @@ func WithWriteTimeout(writeTimeout time.Duration) OptionFn {
 }
 
 // WithPool sets goroutine pool.
+// 设置 goroutine 池
 func WithPool(maxWorkers, maxCapacity int, options ...pond.Option) OptionFn {
 	return func(s *Server) {
 		s.pool = pond.New(maxWorkers, maxCapacity, options...)
@@ -52,6 +53,7 @@ func WithPool(maxWorkers, maxCapacity int, options ...pond.Option) OptionFn {
 }
 
 // WithCustomPool uses a custom goroutine pool.
+// 使用自定义的 goroutine 池
 func WithCustomPool(pool WorkerPool) OptionFn {
 	return func(s *Server) {
 		s.pool = pool

@@ -37,6 +37,7 @@ type functionType struct {
 	ReplyType  reflect.Type
 }
 
+// service 表示服务，类比于 Struct
 type service struct {
 	name     string                   // name of service
 	rcvr     reflect.Value            // receiver of methods for the service
@@ -73,7 +74,7 @@ func isExportedOrBuiltinType(t reflect.Type) bool {
 // 如果 receiver 没有公开类型或者没有合适方法，会返回并记录该错误
 // The client accesses each method using a string of the form "Type.Method",
 // where Type is the receiver's concrete type.
-// 客户端使用 Type.Method 形式，访问每一个方法，type 是 receiver 的合适类型
+// 客户端使用 Type.Method 形式，访问每一个方法，方法 type 是 receiver 的合适类型
 func (s *Server) Register(rcvr interface{}, metadata string) error {
 	// 服务注册
 	sname, err := s.register(rcvr, "", false)
@@ -98,9 +99,13 @@ func (s *Server) RegisterName(name string, rcvr interface{}, metadata string) er
 }
 
 // RegisterFunction publishes a function that satisfy the following conditions:
+// 发布满足下面条件的函数
 //   - three arguments, the first is of context.Context, both of exported type for three arguments
+//   - 三个参数：第一个参数是 context.Context
 //   - the third argument is a pointer
+//   - 第二个参数为指针 reply
 //   - one return value, of type error
+//   - 第三个参数为 error 类型
 //
 // The client accesses function using a string of the form "servicePath.Method".
 func (s *Server) RegisterFunction(servicePath string, fn interface{}, metadata string) error {

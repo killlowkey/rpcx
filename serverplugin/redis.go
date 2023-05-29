@@ -44,6 +44,7 @@ type RedisRegisterPlugin struct {
 }
 
 // Start starts to connect redis cluster
+// 连接到 redis 集群
 func (p *RedisRegisterPlugin) Start() error {
 	if p.done == nil {
 		p.done = make(chan struct{})
@@ -170,7 +171,7 @@ func (p *RedisRegisterPlugin) PreCall(_ context.Context, _, _ string, args inter
 // this service is registered at BASE/serviceName/thisIpAddress node
 func (p *RedisRegisterPlugin) Register(name string, rcvr interface{}, metadata string) (err error) {
 	if strings.TrimSpace(name) == "" {
-		err = errors.New("Register service `name` can't be empty")
+		err = errors.New("register service `name` can't be empty")
 		return
 	}
 
@@ -221,7 +222,7 @@ func (p *RedisRegisterPlugin) Unregister(name string) (err error) {
 	}
 
 	if strings.TrimSpace(name) == "" {
-		err = errors.New("Register service `name` can't be empty")
+		err = errors.New("register service `name` can't be empty")
 		return
 	}
 

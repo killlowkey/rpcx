@@ -88,6 +88,7 @@ func (p *MDNSRegisterPlugin) Start() error {
 					}
 
 					//set this same metrics for all services at this server
+					// 为这个服务器中的所有服务，设置相同指标
 					for _, sm := range p.Services {
 						v, _ := url.ParseQuery(string(sm.Meta))
 						for key, value := range extra {
@@ -115,6 +116,7 @@ func (p *MDNSRegisterPlugin) Stop() error {
 
 	return nil
 }
+
 func (p *MDNSRegisterPlugin) initMDNS() {
 	data, _ := json.Marshal(p.Services)
 	s := url.QueryEscape(string(data))

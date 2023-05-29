@@ -16,6 +16,8 @@ import (
 
 // MetricsPlugin collects metrics of a rpc server.
 // You can report metrics to log, syslog, Graphite, InfluxDB or others to display them in Dashboard such as grafana, Graphite.
+// 收集 RPC 服务指标
+// 你可以报告指标到 log、syslog、Graphite、InfluxDB或其它，来去在仪表盘显示
 type MetricsPlugin struct {
 	Registry metrics.Registry // 指标注册中心，用于存储指标
 	Prefix   string
