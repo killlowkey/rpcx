@@ -32,8 +32,10 @@ type downloadTokenInfo struct {
 }
 
 // FileTransfer support transfer files from clients.
-// It registers a file transfer service and listens a on the given port.
-// Clients will invokes this service to get the token and send the token and the file to this port.
+// It registers a file transfer service and listens an on the given port.
+// Clients will invoke this service to get the token and send the token and the file to this port.
+// 支持客户端文件传输，它注册一个文件传输服务，并且监听给定端口
+// 客户端调用这个服务去获取 token、发送 token和文件到这个端口
 type FileTransfer struct {
 	Addr                string
 	AdvertiseAddr       string

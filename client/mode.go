@@ -1,10 +1,10 @@
 package client
 
-//FailMode decides how clients action when clients fail to invoke services
+// FailMode decides how clients action when clients fail to invoke services
 type FailMode int
 
 const (
-	//Failover selects another server automaticaly
+	//Failover selects another server automatically
 	Failover FailMode = iota
 	//Failfast returns error immediately
 	Failfast
@@ -20,9 +20,9 @@ type SelectMode int
 const (
 	//RandomSelect is selecting randomly
 	RandomSelect SelectMode = iota
-	//RoundRobin is selecting by round robin
+	//RoundRobin is selecting by round-robin
 	RoundRobin
-	//WeightedRoundRobin is selecting by weighted round robin
+	//WeightedRoundRobin is selecting by weighted round-robin
 	WeightedRoundRobin
 	//WeightedICMP is selecting by weighted Ping time
 	WeightedICMP

@@ -121,21 +121,25 @@ func NewMessage() *Message {
 type Header [12]byte
 
 // CheckMagicNumber checks whether header starts rpcx magic number.
+// 检查消息头是否为 rpcx 魔数开头
 func (h Header) CheckMagicNumber() bool {
 	return h[0] == magicNumber
 }
 
 // Version returns version of rpcx protocol.
+// 返回 rpcx 协议版本
 func (h Header) Version() byte {
 	return h[1]
 }
 
 // SetVersion sets version for this header.
+// 设置版本
 func (h *Header) SetVersion(v byte) {
 	h[1] = v
 }
 
 // MessageType returns the message type.
+// 返回消息类型：request、response
 func (h Header) MessageType() MessageType {
 	return MessageType(h[2]&0x80) >> 7
 }
@@ -215,6 +219,7 @@ func (h *Header) SetSeq(seq uint64) {
 }
 
 // Clone clones from a message.
+// 克隆消息
 func (m Message) Clone() *Message {
 	header := *m.Header
 	c := NewMessage()
@@ -226,12 +231,14 @@ func (m Message) Clone() *Message {
 }
 
 // Encode encodes messages.
+// 编码消息
 func (m Message) Encode() []byte {
 	data := m.EncodeSlicePointer()
 	return *data
 }
 
 // EncodeSlicePointer encodes messages as a byte slice pointer we can use pool to improve.
+// 编码消息为 byte 数组，可以使用 pool 来进行池化
 func (m Message) EncodeSlicePointer() *[]byte {
 	var bb = bytes.NewBuffer(make([]byte, 0, len(m.Metadata)*64))
 	encodeMetadata(m.Metadata, bb)
@@ -499,6 +506,7 @@ func (m *Message) Decode(r io.Reader) error {
 	n = n + 4
 	m.Payload = data[n:]
 
+	// 解压数据
 	if m.CompressType() != None {
 		compressor := Compressors[m.CompressType()]
 		if compressor == nil {
@@ -514,6 +522,7 @@ func (m *Message) Decode(r io.Reader) error {
 }
 
 // Reset clean data of this message but keep allocated data
+// 清理消息数据，但保持分配的数据
 func (m *Message) Reset() {
 	resetHeader(m.Header)
 	m.Metadata = nil
@@ -528,6 +537,7 @@ var (
 	zeroHeader      = zeroHeaderArray[1:]
 )
 
+// resetHeader 重置消息头
 func resetHeader(h *Header) {
 	copy(h[1:], zeroHeader)
 }
